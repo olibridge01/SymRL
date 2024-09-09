@@ -169,9 +169,7 @@ class MonteCarloTreeSearchAgent(Agent):
         self.num_node_updates = 0
         self.tree_depth = []
         root_node = self.root_nodes[i]
-        # print(f'Root node tracked_edges before: {root_node.state.tracked_edges}')
         root_node.state.start_edge_tracking()
-        # print(f'Root node tracked_edges after: {root_node.state.tracked_edges}')
 
         fa_subset = self.fa_subsets[i]
         node_expansion_budget = self.node_expansion_budgets[i]
@@ -193,38 +191,15 @@ class MonteCarloTreeSearchAgent(Agent):
         else:
             raise ValueError(f"sim policy {self.sim_policy} not recognised!")
 
-        # _, rem_budget = MonteCarloTreeSearchAgent.find_budget_at_leaf(root_node, rollout_limit, root_node)
         self.sim_policy_inst = sim_policy_class(root_node.state, starting_budget, self.local_random.getstate(), **sim_policy_kwargs)
 
         hit_terminal_depth = False
         self.expansion_N = 0
 
         while True:
-            # follow tree policy to reach a certain node
             tree_nodes, tree_actions = self.follow_tree_policy(root_node, i, fa_subset, training)
             self.tree_depth.append(len(tree_nodes))
-            # For debugging - printing tree state and values
-            # print('-' * 50)
-            # for j, node in enumerate(tree_nodes):
-            #     if j == 0:
-            #         print(f'Root node: {node}')
-            #         print(f'First node: {node.state.first_node}')
-            #     else:
-            #         print(f'Tree node: {node}')
-            #         print(f"First node: {node.state.first_node}")
-            #         print(f'Action: {tree_actions[j - 1]}')
-            #     # print(f"Node Q: {node.Q}")
-            #     # print(f"Node N: {node.N}")
-            # print(f'tree_actions: {tree_actions}')
-            # print('-' * 50)
-
-            # if root_node.N == 3500:
-            #     print(node.state.convert_edges())
-            #     print('')
-            #     for item in node.state.allowed_connections.items():
-            #         print(item)
-
-
+           
             if len(tree_actions) == 0:
                 hit_terminal_depth = True
 
@@ -232,30 +207,22 @@ class MonteCarloTreeSearchAgent(Agent):
             simulation_results = self.execute_simulation_policy(v_l, root_node, i, fa_subset, starting_budget, rollout_limit)
             self.obj_fun_eval_count += 1
 
-            # NEED A FUNCTION TO GET ALL TREE NODES TO BACKUP
             if self.transposition:
-                # valid_nodes, tree_nodes_to_backup = self.get_all_nodes_to_backup(v_l, root_node)
                 tree_nodes_to_backup = [tree_nodes[::-1]]
-                # print(f'Backing up {len(tree_nodes_to_backup)} nodes. Specific path has {len(tree_nodes)} nodes.')
             else:
                 tree_nodes_to_backup = tree_nodes
 
-            # print(f'Backing up {len(valid_nodes)} distinct nodes. Backing up {len(tree_nodes_to_backup)} paths. Specific path has {len(tree_nodes)} nodes.')
             self.backup_values(tree_nodes_to_backup, tree_actions, simulation_results)
             self.update_best_trajectories(i, t, tree_actions, simulation_results)
 
-            # Debugging
-            # print(f'Current root node N: {root_node.N}')
             self.expansion_N += 1
-
 
             if self.expansion_N >= node_expansion_budget:
                 root_Q = root_node.Q
                 if self.hyperparams['adjust_C_p']:
                     self.C_ps[i] = self.hyperparams['C_p'] * root_Q
                 break
-        # print(f"picked action {action} using strategy {self.final_action_strategy}.")
-        # print(f"prior to executing, we had {root_node.state.moves_budget} moves left.")
+      
         if self.draw_trees:
             if hit_terminal_depth:
                 self.draw_search_tree_with_values(i, root_node, t, max_depth=1, drawing_type=self.drawing_type)
@@ -289,20 +256,14 @@ class MonteCarloTreeSearchAgent(Agent):
         actions = []
         for i in range(len(self.root_nodes)):
             root_node = self.root_nodes[i]
-            
-            # Debgging - print root_node's children
-            # print(f"Root node's children: {root_node.children}")
 
             if len(root_node.children) > 0:
                 action, selected_child = self.final_action_strategy(root_node)
-                # print(f'Selected child: {selected_child}')
-                # print(f"Selected child's children: {selected_child.children}")
                 self.root_nodes[i] = selected_child
                 self.root_nodes[i].parent_node = None
                 del root_node
                 gc.collect()
             else:
-                # raise ValueError("Hello!")
                 self.environment.mark_exhausted(i)
                 action = -1
 
@@ -311,18 +272,12 @@ class MonteCarloTreeSearchAgent(Agent):
         
         self.tree_depths.append(np.mean(self.tree_depth))
         self.updates.append(self.num_node_updates)
-        # print(f'Picked actions: {actions}. Num node updates: {self.num_node_updates}')
-        # print(f'Average tree depth: {np.mean(self.tree_depth)}')
+
         return actions
 
     def pick_robust_child(self, root_node):
         """Pick the child node with highest N and Q values."""
-        # print(f"there are {len(root_node.children)} possible actions")
-        # print(f"there have been {root_node.state.number_actions_taken} actions so far.")
-        # print(f"move budget is {root_node.state.moves_budget}.")
-        # print(f'Root node children: {root_node.children}')
         return sorted(root_node.children.items(), key=lambda x: (x[1].N, x[1].Q), reverse=True)[0]
-
 
     def pick_max_child(self, root_node):
         return sorted(root_node.children.items(), key=lambda x: (x[1].Q, x[1].N), reverse=True)[0]
@@ -331,8 +286,6 @@ class MonteCarloTreeSearchAgent(Agent):
         """Follow the tree policy to reach a leaf node. If a node is not fully expanded, expand it."""
         traversed_nodes = []
         actions_taken = []
-
-        # print(node.state.first_node)
 
         if node.num_valid_actions == 0:
             traversed_nodes.append(node)
@@ -363,30 +316,17 @@ class MonteCarloTreeSearchAgent(Agent):
 
                 if not seen:
                     break
-                # break
             else:
                 if node.num_valid_actions == 0:
                     break
                 else:
 
                     highest_ucb, ucb_action, ucb_node = self.pick_best_child(node, i, self.C_ps[i])
-                    # if ucb_node is None:
-                    #     print(f"caught the None node.")
-                    #     print(f"highest_ucb is {highest_ucb}")
-                    #     print(f"ucb_action is {ucb_action}")
-                    #     remaining_budget = self.environment.get_remaining_budget(0)
-                    #     print(f"rem budget is {remaining_budget}")
-                    #     print(f"num valid acts is {node.num_valid_actions}")
-                    #     print(f"value of obj function is {self.environment.get_objective_function_value(node.state)}")
-                    #     self.pick_best_child(node, self.C_p, print_vals=True)
-
-                    # Go to the best child node.
+                   
                     node = ucb_node
                     actions_taken.append(ucb_action)
                     continue
                     
-        # print(actions_taken)
-        # print(f"Traversed {len(traversed_nodes)} nodes.")
         return traversed_nodes, actions_taken
 
     def initialize_tree_node(self, parent_node, node_state, chosen_action, updated_budget, fa_subset, training, with_depth=-1):
@@ -396,7 +336,6 @@ class MonteCarloTreeSearchAgent(Agent):
         if self.transposition:
             graph_hash = get_graph_hash(node_state, size=64, include_first=True)
             if graph_hash in self.node_hashmap:
-                # print('Node already in hashmap! Linking new parent...')
 
                 next_node = self.node_hashmap[graph_hash] # Get next node from hash map
                 next_node.parent_nodes.append(parent_node) # Add parent node to list of child's parents
@@ -417,7 +356,7 @@ class MonteCarloTreeSearchAgent(Agent):
         predictor_vals = self.get_predictor_values(node_state, next_node_actions)
 
         if self.transposition:
-            next_node = TranspositionTreeNode2(node_state, parent_node, chosen_action, next_node_actions, 
+            next_node = TranspositionTreeNode(node_state, parent_node, chosen_action, next_node_actions, 
                                                remaining_budget=updated_budget, depth=depth)
             
             # Add new node to hashmap
@@ -442,22 +381,20 @@ class MonteCarloTreeSearchAgent(Agent):
         uniform_probs = np.full(n, 1, dtype=np.float32)
         return uniform_probs
 
-
     def pick_best_child(self, node, i, c, print_vals=False):
         """Pick the child node with the highest UCB1 value."""
         highest_value = float("-inf")
         best_node = None
         best_action = None
 
-        # Get the UCB1 value for each child node.
+        # Get the UCB value for each child node.
         child_values = {action: self.node_selection_strategy(node, i, action, child_node)
                         for action, child_node in node.children.items()}
-
 
         if print_vals:
             print(f"child values were {child_values}")
 
-        # Select the best action (child)
+        # Select the best action
         for action, value in child_values.items():
             if value > highest_value:
                 highest_value = value
@@ -467,7 +404,6 @@ class MonteCarloTreeSearchAgent(Agent):
 
     def node_selection_strategy(self, parent_node, i, action, child_node):
         """Given a child node, return the value of the node based on the selection strategy."""
-        # Based on UCB1 for default UCT.
         
         if self.transposition:
             Q, parent_N, child_N = child_node.Q, parent_node.N, child_node.action_counts[parent_node]
@@ -503,8 +439,6 @@ class MonteCarloTreeSearchAgent(Agent):
 
 
         for sim_number in range(self.num_simulations):
-            # print(f"yeah, doing a sim!")
-            # print(f'Tracked edges: {node.state.tracked_edges}')
             self.sim_policy_inst.reset(node.state.tracked_edges)
             out_of_tree_acts, R, post_random_state, sim_number = self.sim_policy_episode(self.sim_policy_inst,
                                                                                                 node,
@@ -517,43 +451,26 @@ class MonteCarloTreeSearchAgent(Agent):
                                                                                                 action_applier,
                                                                                                 obj_fun_computation,
                                                                                                 obj_fun_kwargs,
-                                                                                                self.local_random.getstate(),
-                                                                                                )
+                                                                                                self.local_random.getstate())
             simulation_results.append((out_of_tree_acts, R, post_random_state, sim_number))
             self.local_random.setstate(post_random_state)
         return simulation_results
 
     @staticmethod
     def sim_policy_episode(sim_policy,
-                                  node,
-                                  root_node,
-                                  fa_subset,
-                                  starting_budget,
-                                  rollout_limit,
-                                  sim_number,
-                                  valid_actions_finder,
-                                  action_applier,
-                                  obj_fun_computation,
-                                  obj_fun_kwargs,
-                                  random_state,
-                                  ):
-
-        """
-        when do we want to stop?
-            A: when total used budget from _current root_ exceeds the rollout limit
-            alternatively, since env needs remaining budget:
-                - subtract from root remaining budget the budget of the current node (that's how much was used up
-                from root to here)
-                - then, subtract from rollout limit this value: that's your remaining budget
-                - take the minimum between this value and rem budget at starting node; this will be hit when search
-                is nearly completed
-        """
+                           node,
+                           root_node,
+                           fa_subset,
+                           starting_budget,
+                           rollout_limit,
+                           sim_number,
+                           valid_actions_finder,
+                           action_applier,
+                           obj_fun_computation,
+                           obj_fun_kwargs,
+                           random_state):
 
         initial_depth, rem_budget = MonteCarloTreeSearchAgent.find_budget_at_leaf(root_node, rollout_limit, node)
-
-        # orig_budget = rem_budget
-        # print(f"used so far: {used_so_far}, rem at node: {node.remaining_budget}")
-        # print(f"computed me budget as {rem_budget}")
 
         state = node.state.copy()
         out_of_tree_actions = []
@@ -570,14 +487,11 @@ class MonteCarloTreeSearchAgent(Agent):
 
             if rem_budget <= budget_eps or len(possible_actions) == 0:
                 break
-                # raise ValueError("Shouldn't run simulation from node when no actions are available!")
 
             chosen_action = sim_policy.choose_action(state, rem_budget, total_depth, possible_actions)
             out_of_tree_actions.append(chosen_action)
 
             rem_budget = action_applier(state, chosen_action, rem_budget)
-            # print(f"yay, adding an action from simulation policy! budget updated from {orig_budget} to {rem_budget}")
-
             current_rollout_depth += 1
 
         final_state = state.apply_dynamic_edges()
@@ -602,7 +516,6 @@ class MonteCarloTreeSearchAgent(Agent):
         node_val = final_value
         return node_val
 
-
     def update_best_trajectories(self, i, t, tree_actions, simulation_results):
         for out_of_tree_acts, R, _, sim_num in simulation_results:
             if R > self.best_Rs[i]:
@@ -616,21 +529,9 @@ class MonteCarloTreeSearchAgent(Agent):
 
                 # print(f'New best trajectory found with reward {R - self.environment.get_initial_values()[i]}! {best_traj}')
 
-
     def backup_values(self, tree_nodes, tree_actions, simulation_results):
         """Backup the values of the nodes in the tree after a simulation."""
-        # print([x[1] for x in simulation_results])
         if self.transposition:
-            # if len(tree_nodes) > 2:
-            #     print(f'Backing up {len(tree_nodes)} paths.')
-            # if len(tree_nodes) > 50:
-            #     print(tree_nodes)
-
-            # next_nodes = set()
-            # for path in tree_nodes:
-            #     next_nodes.add(path[-2])
-            # if len(next_nodes) > 2:
-            #     print(f'Backing up {len(next_nodes)} distinct nodes, {len(tree_nodes)} paths.')
             for path in tree_nodes:
                 for j, tree_node in enumerate(path):
                     parent_node = path[j+1] if j < len(path) - 1 else None
@@ -648,7 +549,6 @@ class MonteCarloTreeSearchAgent(Agent):
     @staticmethod
     def get_trajectory_for_graph(agent_class, environment, step, step_dep_params, hyperparams, options, starting_graph,
                                  starting_graph_initial_obj_values):
-
         agent = agent_class(environment)
         agent.setup(options, hyperparams)
         if step_dep_params is not None:
@@ -661,7 +561,6 @@ class MonteCarloTreeSearchAgent(Agent):
 
         # Plot final state
         final_state = agent.environment.g_list[0]
-        # final_state, _ = final_state.add_edge(final_state.current_node, final_state.starting_node)
         final_state.draw_to_file('test.png') 
 
         agent.environment.tear_down()
@@ -678,9 +577,6 @@ class MonteCarloTreeSearchAgent(Agent):
 
         t = 0
         while not self.environment.is_terminal():
-            # if self.log_progress:
-            #     self.logger.info(f"executing inner search step {t}")
-            #     self.logger.info(f"{get_memory_usage_str()}")
             self.obj_fun_eval_count = 0
             self.log_timings_if_required(t, "before", 1, self.obj_fun_eval_count)
             self.run_search_for_g_list(t, force_init=self.force_init, training=True)
@@ -784,100 +680,6 @@ class MonteCarloTreeSearchAgent(Agent):
         }
         return default_hyperparams
 
-    def draw_search_tree_with_values(self, graph_index, root_node, t, max_depth=1, max_breadth=20, drawing_type="mpl", write_dot=False):
-        with warnings.catch_warnings():
-
-            G = nx.DiGraph()
-            root_node_label = self.construct_node_label(root_node, 1.0, drawing_type)
-            G.add_node(root_node_label, value=root_node.Q)
-            self.add_mcts_edges_recursively(G, root_node, root_node_label, drawing_type, depth=0, max_depth=max_depth,
-                                            max_breadth=max_breadth)
-
-
-            if drawing_type == "mpl":
-                pos = graphviz_layout(G, prog='dot')
-                dot_file = self.tree_illustration_path / f"mcts_tree_g{graph_index}_{self.random_seed}_{t}.dot"
-                dot_filename = str(dot_file)
-                png_filename = str(self.tree_illustration_path / f"mcts_tree_g{graph_index}_{self.random_seed}_{t}.png")
-
-                plt.figure(figsize=(20, 10))
-                plt.title('Monte Carlo Search Tree')
-
-                node_data = list(G.nodes())
-                node_colours = [float(x.split("\n")[0].split(":")[1]) for x in node_data]
-
-                labels = {}
-                for u, v, data in G.edges(data=True):
-                    labels[(u, v)] = data['action']
-
-                nx.draw_networkx(G, pos, with_labels=True, arrows=True, node_size=1500, font_size=8, alpha=0.95, vmin=0,
-                                 vmax=1,
-                                 cmap="Reds", node_color=node_colours)
-                nx.draw_networkx_edges(G, pos, edge_color='g', width=5)
-
-
-
-                nx.draw_networkx_edge_labels(G, pos, font_size=8, edge_labels=labels)
-                plt.axis('off')
-                plt.savefig(png_filename, bbox_inches="tight")
-                plt.close()
-
-                # subprocess.Popen(["dot", "-Tpng", dot_file, "-o", png_file])
-
-                if write_dot:
-                    A = nx.nx_agraph.to_agraph(G)
-                    A.write(dot_filename)
-
-            elif drawing_type == "tikz":
-                pos = graphviz_layout(G, prog='dot', args='-Gnodesep=7.5 -Granksep=75')
-
-                tikz_filename = str(self.tree_illustration_path / f"tikz_mcts_tree_g{graph_index}_{self.random_seed}_{t}.tex")
-                my_style = {}
-
-                lightblue = (171, 215, 230)
-                my_style["canvas"] = (12, 2.5)
-                my_style["edge_color"] = ['darkgray' for edge in G.edges]
-                my_style['node_color'] = [lightblue for n in G.nodes]
-                my_style["node_label"] = [n for n in G.nodes()]
-                my_style["node_label_size"] = [0 for n in G.nodes()]
-
-                my_style["node_size"] = [0.28 for n in G.nodes()]
-                my_style["edge_width"] = [0.85 for e in G.edges()]
-                my_style["edge_style"] = ["-" for e in G.edges()]
-
-                my_style["edge_label_size"] = [0 for e in G.edges()]
-                network2tikz.plot(G, tikz_filename, **my_style, layout=pos, standalone=False)
-
-
-
-    def add_mcts_edges_recursively(self, G, parent_node, parent_node_label, drawing_type, depth, max_depth, max_breadth):
-        if max_depth == 0 or depth == max_depth:
-            return
-
-        children_items = parent_node.children.items()
-        visited_children = [entry for entry in children_items]
-        children = sorted(visited_children, key=lambda x: x[1].Q, reverse=True)[0:max_breadth]
-
-        for action, child_node in children:
-            predictor_value = parent_node.get_predictor_value(action)
-            child_node_label = self.construct_node_label(child_node, predictor_value, drawing_type)
-            G.add_node(child_node_label, value=child_node.Q)
-            G.add_edge(parent_node_label, child_node_label, action=f"{action}")
-            self.add_mcts_edges_recursively(G, child_node, child_node_label, drawing_type, depth + 1, max_depth, max_breadth)
-
-    def construct_node_label(self, node, predictor_value, drawing_type):
-        state_id = get_graph_hash(node.state, size=64, include_first=True)
-        if drawing_type == "mpl":
-            node_label = f"Q: {node.Q: .3f}\n" \
-                        f"N: {node.N}\n" \
-                        f"B: {node.remaining_budget: .3f}\n" \
-                        f"P: {predictor_value:.3f}\n" \
-                        f"A: {node.parent_action}\n" \
-                        f"id: {state_id}"
-            return node_label
-        else:
-            return state_id
-
     def finalize(self):
         if self.parallel_eval:
             if self.eval_pool is not None:
@@ -887,7 +689,6 @@ class MonteCarloTreeSearchAgent(Agent):
         self.root_nodes = None
         self.fa_subsets = None
         self.node_expansion_budgets = None
-
 
 
 class StandardMCTSAgent(MonteCarloTreeSearchAgent):
@@ -928,32 +729,6 @@ class MinCostMCTSAgent(MonteCarloTreeSearchAgent):
         super().setup(options, hyps_copy)
 
 
-class AR80RandMCTSAgent(MonteCarloTreeSearchAgent):
-    algorithm_name = 'uct_rand_80'
-
-    def setup(self, options, hyperparams):
-        hyps_copy = deepcopy(hyperparams)
-        hyps_copy['ar_fun'] = 'percentage'
-        hyps_copy['ar_modifier'] = 80
-        hyps_copy['reduction_policy'] = RandomReductionPolicy.policy_name
-        hyps_copy['sim_policy'] = 'random'
-        hyps_copy['btm'] = False
-        super().setup(options, hyps_copy)
-
-
-class AR60RandMCTSAgent(MonteCarloTreeSearchAgent):
-    algorithm_name = 'uct_rand_60'
-
-    def setup(self, options, hyperparams):
-        hyps_copy = deepcopy(hyperparams)
-        hyps_copy['ar_fun'] = 'percentage'
-        hyps_copy['ar_modifier'] = 60
-        hyps_copy['reduction_policy'] = RandomReductionPolicy.policy_name
-        hyps_copy['sim_policy'] = 'random'
-        hyps_copy['btm'] = False
-        super().setup(options, hyps_copy)
-
-
 class AR40RandMCTSAgent(MonteCarloTreeSearchAgent):
     algorithm_name = 'uct_rand_40'
 
@@ -978,98 +753,6 @@ class AR40DegreeMCTSAgent(MonteCarloTreeSearchAgent):
         hyps_copy['sim_policy'] = 'random'
         hyps_copy['btm'] = False
         super().setup(options, hyps_copy)
-
-
-class AR40InvDegreeMCTSAgent(MonteCarloTreeSearchAgent):
-    algorithm_name = 'uct_invdeg_40'
-
-    def setup(self, options, hyperparams):
-        hyps_copy = deepcopy(hyperparams)
-        hyps_copy['ar_fun'] = 'percentage'
-        hyps_copy['ar_modifier'] = 40
-        hyps_copy['reduction_policy'] = InvDegreeReductionPolicy.policy_name
-        hyps_copy['sim_policy'] = 'random'
-        hyps_copy['btm'] = False
-        super().setup(options, hyps_copy)
-
-
-class AR40LBHBMCTSAgent(MonteCarloTreeSearchAgent):
-    algorithm_name = 'uct_lbhb_40'
-
-    def setup(self, options, hyperparams):
-        hyps_copy = deepcopy(hyperparams)
-        hyps_copy['ar_fun'] = 'percentage'
-        hyps_copy['ar_modifier'] = 40
-        hyps_copy['reduction_policy'] = LBHBReductionPolicy.policy_name
-        hyps_copy['sim_policy'] = 'random'
-        hyps_copy['btm'] = False
-        super().setup(options, hyps_copy)
-
-
-class AR40NumConnsMCTSAgent(MonteCarloTreeSearchAgent):
-    algorithm_name = 'uct_numconns_40'
-
-    def setup(self, options, hyperparams):
-        hyps_copy = deepcopy(hyperparams)
-        hyps_copy['ar_fun'] = 'percentage'
-        hyps_copy['ar_modifier'] = 40
-        hyps_copy['reduction_policy'] = NumConnsReductionPolicy.policy_name
-        hyps_copy['sim_policy'] = 'random'
-        hyps_copy['btm'] = False
-        super().setup(options, hyps_copy)
-
-
-class AR40BestEdgeMCTSAgent(MonteCarloTreeSearchAgent):
-    algorithm_name = 'uct_be_40'
-
-    def setup(self, options, hyperparams):
-        hyps_copy = deepcopy(hyperparams)
-        hyps_copy['ar_fun'] = 'percentage'
-        hyps_copy['ar_modifier'] = 40
-        hyps_copy['reduction_policy'] = BestEdgeReductionPolicy.policy_name
-        hyps_copy['sim_policy'] = 'random'
-        hyps_copy['btm'] = False
-        super().setup(options, hyps_copy)
-
-
-class AR40BestEdgeCSMCTSAgent(MonteCarloTreeSearchAgent):
-    algorithm_name = 'uct_becs_40'
-
-    def setup(self, options, hyperparams):
-        hyps_copy = deepcopy(hyperparams)
-        hyps_copy['ar_fun'] = 'percentage'
-        hyps_copy['ar_modifier'] = 40
-        hyps_copy['reduction_policy'] = BestEdgeCSReductionPolicy.policy_name
-        hyps_copy['sim_policy'] = 'random'
-        hyps_copy['btm'] = False
-        super().setup(options, hyps_copy)
-
-
-class AR40AvgEdgeMCTSAgent(MonteCarloTreeSearchAgent):
-    algorithm_name = 'uct_ae_40'
-
-    def setup(self, options, hyperparams):
-        hyps_copy = deepcopy(hyperparams)
-        hyps_copy['ar_fun'] = 'percentage'
-        hyps_copy['ar_modifier'] = 40
-        hyps_copy['reduction_policy'] = AvgEdgeReductionPolicy.policy_name
-        hyps_copy['sim_policy'] = 'random'
-        hyps_copy['btm'] = False
-        super().setup(options, hyps_copy)
-
-
-class AR40AvgEdgeCSMCTSAgent(MonteCarloTreeSearchAgent):
-    algorithm_name = 'uct_aecs_40'
-
-    def setup(self, options, hyperparams):
-        hyps_copy = deepcopy(hyperparams)
-        hyps_copy['ar_fun'] = 'percentage'
-        hyps_copy['ar_modifier'] = 40
-        hyps_copy['reduction_policy'] = AvgEdgeCSReductionPolicy.policy_name
-        hyps_copy['sim_policy'] = 'random'
-        hyps_copy['btm'] = False
-        super().setup(options, hyps_copy)
-
 
 class SGUCTAgent(MonteCarloTreeSearchAgent):
     algorithm_name = 'sg_uct'
