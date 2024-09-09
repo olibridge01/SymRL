@@ -1,0 +1,15 @@
+version: '2.3'
+services:
+  psn:
+    image: relnet/psn
+    build:
+      context: .
+      dockerfile: ./docker/psn/Dockerfile
+    volumes:
+      - ${RN_SOURCE_DIR}:/relnet
+      - ${RN_EXPERIMENT_DATA_DIR}:/experiment_data
+    stdin_open: true
+    tty: true
+    # network_mode: host
+    container_name: symrl-psn
+    hostname: symrl-psn
